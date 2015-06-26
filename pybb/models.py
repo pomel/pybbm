@@ -144,6 +144,7 @@ class Topic(models.Model):
     on_moderation = models.BooleanField(_('On moderation'), default=False)
     poll_type = models.IntegerField(_('Poll type'), choices=POLL_TYPE_CHOICES, default=POLL_TYPE_NONE)
     poll_question = models.TextField(_('Poll question'), blank=True, null=True)
+    poll_is_private = models.BooleanField(_('Poll is private'), default=False)
 
     class Meta(object):
         ordering = ['-created']
