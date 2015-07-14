@@ -59,6 +59,9 @@ class PostForm(forms.ModelForm):
         label=ugettext_lazy('Poll question'),
         required=False,
         widget=forms.Textarea(attrs={'class': 'no-markitup'}))
+    poll_is_private = forms.BooleanField(
+        label=ugettext_lazy('Poll is private'),
+        required=False)
 
     class Meta(object):
         model = Post
@@ -83,6 +86,7 @@ class PostForm(forms.ModelForm):
             kwargs.setdefault('initial', {})['name'] = kwargs['instance'].topic.name
             kwargs.setdefault('initial', {})['poll_type'] = kwargs['instance'].topic.poll_type
             kwargs.setdefault('initial', {})['poll_question'] = kwargs['instance'].topic.poll_question
+            kwargs.setdefault('initial', {})['poll_is_private'] = kwargs['instance'].topic.poll_is_private
 
         super(PostForm, self).__init__(**kwargs)
 
@@ -91,9 +95,11 @@ class PostForm(forms.ModelForm):
             del self.fields['name']
             del self.fields['poll_type']
             del self.fields['poll_question']
+            del self.fields['poll_is_private']
         elif not self.may_create_poll:
             del self.fields['poll_type']
             del self.fields['poll_question']
+            del self.fields['poll_is_private']
 
         self.available_smiles = defaults.PYBB_SMILES
         self.smiles_prefix = defaults.PYBB_SMILES_PREFIX
@@ -126,6 +132,7 @@ class PostForm(forms.ModelForm):
                 if self.may_create_poll:
                     post.topic.poll_type = self.cleaned_data['poll_type']
                     post.topic.poll_question = self.cleaned_data['poll_question']
+                    post.topic.poll_is_private = self.cleaned_data['poll_is_private']
                 post.topic.updated = tznow()
                 if commit:
                     post.topic.save()
@@ -143,6 +150,7 @@ class PostForm(forms.ModelForm):
                 user=self.user,
                 name=self.cleaned_data['name'],
                 poll_type=self.cleaned_data.get('poll_type', Topic.POLL_TYPE_NONE),
+                poll_is_private=self.cleaned_data.get('poll_is_private', 0),
                 poll_question=self.cleaned_data.get('poll_question', None),
             )
             if not allow_post:
