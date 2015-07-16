@@ -462,6 +462,16 @@ class PollAnswerUser(models.Model):
     def __str__(self):
         return '%s - %s' % (self.poll_answer.topic, self.user)
 
+class TopicEmailSendUserNotification(models.Model):
+    """
+    Stored in the table value of the flag, if the "Truth"
+    the message is not sent if there is no record or a flag "Lies"
+    then send mail about changes in the topic subscriber
+    """
+    user = models.ForeignKey(get_user_model_path())
+    topic = models.ForeignKey(Topic, related_name='notifications')
+    flag = models.BooleanField(default=True)
+
 
 if django.VERSION[:2] < (1, 7):
     from pybb import signals

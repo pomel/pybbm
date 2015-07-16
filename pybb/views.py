@@ -22,6 +22,7 @@ from pybb import compat, defaults, util
 from pybb.compat import get_atomic_func
 from pybb.forms import PostForm, AdminPostForm, AttachmentFormSet, PollAnswerFormSet, PollForm
 from pybb.models import Category, Forum, Topic, Post, TopicReadTracker, ForumReadTracker, PollAnswerUser
+from pybb.models import TopicEmailSendUserNotification
 from pybb.permissions import perms
 from pybb.templatetags.pybb_tags import pybb_topic_poll_not_voted
 
@@ -176,6 +177,11 @@ class TopicView(RedirectToLoginMixin, PaginatorMixin, PybbFormsMixin, generic.Li
         if request.GET.get('first-unread'):
             if request.user.is_authenticated():
                 read_dates = []
+                try:
+                    TopicEmailSendUserNotification.objects.get(
+                        user=request.user, topic=self.topic).delete()
+                except TopicEmailSendUserNotification.DoesNotExist:
+                    pass
                 try:
                     read_dates.append(TopicReadTracker.objects.get(user=request.user, topic=self.topic).time_stamp)
                 except TopicReadTracker.DoesNotExist:
