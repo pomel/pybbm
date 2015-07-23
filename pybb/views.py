@@ -659,6 +659,8 @@ class TopicPollVoteView(PybbFormsMixin, generic.UpdateView):
                 return HttpResponseBadRequest()
 
             PollAnswerUser.objects.create(poll_answer=answer, user=self.request.user)
+        messages.add_message(self.request, messages.SUCCESS, 
+                             _('Your vote has been received, thank you'))
         return super(ModelFormMixin, self).form_valid(form)
 
     def form_invalid(self, form):
