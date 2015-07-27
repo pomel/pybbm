@@ -747,6 +747,10 @@ msgstr "вчера, %s"
 msgid "Can't get profile for anonymous user"
 msgstr "Невозможно получить профиль для анонимного пользователя"
 
+#: views.py:663
+msgid "Your vote has been received, thank you"
+msgstr "Ваш голос был принят, спасибо"
+
 #: views.py:711
 msgid "All forums marked as read"
 msgstr "Все форумы отмечены как прочтенные"
