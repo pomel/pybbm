@@ -18,6 +18,7 @@ from django.utils.translation import ugettext as _
 from django.utils import dateformat
 from django.utils.timezone import timedelta
 from django.utils.timezone import now as tznow
+from django.db.models import Sum
 
 try:
     import pytils
@@ -179,6 +180,38 @@ def pybb_topic_unread(topics, user):
 
 
 @register.filter
+def topic_count_with_child(forum):
+    """
+    По объекту форума, суммируем у "детей" колличество постов.
+    """
+    try:
+        count = forum.topic_count
+        child = forum.child_forums.all().aggregate(
+            topic_count=Sum('topic_count'))['topic_count']
+        if child:
+            count += child
+        return count
+    except AttributeError:
+        return 0
+
+
+@register.filter
+def post_count_with_child(forum):
+    """
+    По объекту форума, суммируем у "детей" колличество сообщений.
+    """
+    try:
+        count = forum.post_count
+        child = forum.child_forums.all().aggregate(
+            post_count=Sum('post_count'))['post_count']
+        if child:
+            count += child
+        return count
+    except AttributeError:
+        return 0
+
+
+@register.filter
 def pybb_forum_unread(forums, user):
     """
     Check if forum has unread messages.
@@ -186,17 +219,21 @@ def pybb_forum_unread(forums, user):
     forum_list = list(forums)
     if user.is_authenticated():
         for forum in forum_list:
-            forum.unread = forum.topic_count > 0
+            forum.unread = topic_count_with_child(forum) > 0
         forum_marks = ForumReadTracker.objects.filter(
             user=user,
             forum__in=forum_list
         ).select_related('forum')
-        forum_dict = dict(((forum.id, forum) for forum in forum_list))
-        for mark in forum_marks:
-            curr_forum = forum_dict[mark.forum.id]
-            if (curr_forum.updated is None) or (curr_forum.updated <= mark.time_stamp):
-                if not any((f.unread for f in pybb_forum_unread(curr_forum.child_forums.all(), user))):
-                    forum_dict[mark.forum.id].unread = False
+
+        marks_dict = dict(((mark.forum.id, mark) for mark in forum_marks))
+        for forum in forum_list:
+            is_children_read = not any(
+                f.unread for f in pybb_forum_unread(
+                    forum.child_forums.all(), user))
+            update_earlier = (marks_dict.get(forum.id) and
+                              forum.updated <= marks_dict[forum.id].time_stamp)
+            if (forum.updated is None or update_earlier) and is_children_read:
+                forum.unread = False
     return forum_list
 
 
