@@ -232,8 +232,9 @@ def pybb_forum_unread(forums, user):
             is_children_read = not any(
                 f.unread for f in pybb_forum_unread(
                     forum.child_forums.all(), user))
-            updated = forum.updated or pytz.utc.localize(datetime.datetime.min)
-            read = getattr(marks_dict.get(forum.id), 'time_stamp', tznow())
+            default_date = pytz.utc.localize(datetime.datetime.min)
+            updated = forum.updated or default_date
+            read = getattr(marks_dict.get(forum.id), 'time_stamp', default_date)
             if updated <= read and is_children_read:
                 forum.unread = False
     return forum_list
