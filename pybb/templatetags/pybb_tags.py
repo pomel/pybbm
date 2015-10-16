@@ -5,7 +5,8 @@ import inspect
 import math
 import time
 import warnings
-from datetime import datetime
+import pytz
+import datetime
 
 from django import template
 from django.core.cache import cache
@@ -231,9 +232,8 @@ def pybb_forum_unread(forums, user):
             is_children_read = not any(
                 f.unread for f in pybb_forum_unread(
                     forum.child_forums.all(), user))
-            updated = forum.updated or datetime.min
-            read = getattr(marks_dict.get(forum.id), 'time_stamp',
-                           datetime.now())
+            updated = forum.updated or pytz.utc.localize(datetime.datetime.min)
+            read = getattr(marks_dict.get(forum.id), 'time_stamp', tznow())
             if updated <= read and is_children_read:
                 forum.unread = False
     return forum_list
