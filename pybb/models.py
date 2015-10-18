@@ -83,6 +83,14 @@ class Forum(models.Model):
         posts = Post.objects.filter(topic__forum_id=self.id)
         self.post_count = posts.count()
         self.topic_count = Topic.objects.filter(forum=self).count()
+
+        # forum can have subforum (parent field), we must take
+        # this into account when search for updated last message
+        child_forums = Forum.objects.filter(parent=self)
+        all_forums_ids = [forum.id for forum in child_forums]
+        all_forums_ids.append(self.id)
+        if len(all_forums_ids) > 1:
+            posts = Post.objects.filter(topic__forum_id__in=all_forums_ids)
         try:
             last_post = posts.order_by('-created', '-id')[0]
             self.updated = last_post.updated or last_post.created
@@ -90,6 +98,10 @@ class Forum(models.Model):
             pass
 
         self.save()
+
+        # update parent forum
+        if self.parent:
+            self.parent.update_counters()
 
     def get_absolute_url(self):
         return reverse('pybb:forum', kwargs={'pk': self.id})
