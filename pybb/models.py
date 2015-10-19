@@ -86,8 +86,8 @@ class Forum(models.Model):
 
         # forum can have subforum (parent field), we must take
         # this into account when search for updated last message
-        child_forums = Forum.objects.filter(parent=self)
-        all_forums_ids = [forum.id for forum in child_forums]
+        all_forums_ids = list(Forum.objects.filter(
+            parent=self).values_list('id', flat=True))
         all_forums_ids.append(self.id)
         if len(all_forums_ids) > 1:
             posts = Post.objects.filter(topic__forum_id__in=all_forums_ids)
@@ -100,8 +100,11 @@ class Forum(models.Model):
         self.save()
 
         # update parent forum
-        if self.parent:
-            self.parent.update_counters()
+        parent = self.parent
+        while parent:
+            parent.updated = self.updated
+            parent.save()
+            parent = parent.parent
 
     def get_absolute_url(self):
         return reverse('pybb:forum', kwargs={'pk': self.id})
@@ -473,6 +476,7 @@ class PollAnswerUser(models.Model):
 
     def __str__(self):
         return '%s - %s' % (self.poll_answer.topic, self.user)
+
 
 class TopicEmailSendUserNotification(models.Model):
     """
