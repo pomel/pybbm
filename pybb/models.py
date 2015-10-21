@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
+import datetime
 import django
 
 from django.core.urlresolvers import reverse
@@ -95,7 +96,7 @@ class Forum(models.Model):
             last_post = posts.order_by('-created', '-id')[0]
             self.updated = last_post.updated or last_post.created
         except IndexError:
-            pass
+            self.updated = datetime.datetime.now()  # no posts in forum
 
         self.save()
 
@@ -190,7 +191,8 @@ class Topic(models.Model):
         return reverse('pybb:topic', kwargs={'pk': self.id})
 
     def save(self, *args, **kwargs):
-        if self.id is None:
+        created = self.id is None
+        if created:
             self.created = tznow()
 
         forum_changed = False
@@ -201,6 +203,9 @@ class Topic(models.Model):
                 forum_changed = True
 
         super(Topic, self).save(*args, **kwargs)
+
+        if created:
+            self.forum.update_counters()
 
         if forum_changed:
             old_topic.forum.update_counters()
