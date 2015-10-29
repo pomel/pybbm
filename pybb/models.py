@@ -90,11 +90,15 @@ class Forum(models.Model):
         all_forums_ids = list(Forum.objects.filter(
             parent=self).values_list('id', flat=True))
         all_forums_ids.append(self.id)
-        if len(all_forums_ids) > 1:
-            posts = Post.objects.filter(topic__forum_id__in=all_forums_ids)
+
+        # we can create Topic without Post through admin interface
+        # but Forum 'updated' field must be set correctly in this case
+        # so check Topic 'updated' field instead Post
+        topics = Topic.objects.filter(forum_id__in=all_forums_ids)
+
         try:
-            last_post = posts.order_by('-created', '-id')[0]
-            self.updated = last_post.updated or last_post.created
+            last_topic = topics.order_by('-created', '-id')[0]
+            self.updated = last_topic.updated or last_topic.created
         except IndexError:
             self.updated = datetime.datetime.now()  # no posts in forum
 
