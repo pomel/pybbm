@@ -97,7 +97,7 @@ class Forum(models.Model):
         topics = Topic.objects.filter(forum_id__in=all_forums_ids)
 
         try:
-            last_topic = topics.order_by('-created', '-id')[0]
+            last_topic = topics.order_by('-updated', '-id')[0]
             self.updated = last_topic.updated or last_topic.created
         except IndexError:
             self.updated = datetime.datetime.now()  # no posts in forum
