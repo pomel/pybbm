@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
+import datetime
 import django
 
 from django.core.urlresolvers import reverse
@@ -83,13 +84,32 @@ class Forum(models.Model):
         posts = Post.objects.filter(topic__forum_id=self.id)
         self.post_count = posts.count()
         self.topic_count = Topic.objects.filter(forum=self).count()
+
+        # forum can have subforum (parent field), we must take
+        # this into account when search for updated last message
+        all_forums_ids = list(Forum.objects.filter(
+            parent=self).values_list('id', flat=True))
+        all_forums_ids.append(self.id)
+
+        # we can create Topic without Post through admin interface
+        # but Forum 'updated' field must be set correctly in this case
+        # so check Topic 'updated' field instead Post
+        topics = Topic.objects.filter(forum_id__in=all_forums_ids)
+
         try:
-            last_post = posts.order_by('-created', '-id')[0]
-            self.updated = last_post.updated or last_post.created
+            last_topic = topics.order_by('-updated', '-id')[0]
+            self.updated = last_topic.updated or last_topic.created
         except IndexError:
-            pass
+            self.updated = datetime.datetime.now()  # no posts in forum
 
         self.save()
+
+        # update parent forum
+        parent = self.parent
+        while parent:
+            parent.updated = self.updated
+            parent.save()
+            parent = parent.parent
 
     def get_absolute_url(self):
         return reverse('pybb:forum', kwargs={'pk': self.id})
@@ -144,6 +164,7 @@ class Topic(models.Model):
     on_moderation = models.BooleanField(_('On moderation'), default=False)
     poll_type = models.IntegerField(_('Poll type'), choices=POLL_TYPE_CHOICES, default=POLL_TYPE_NONE)
     poll_question = models.TextField(_('Poll question'), blank=True, null=True)
+    poll_is_private = models.BooleanField(_('Poll is private'), default=False)
 
     class Meta(object):
         ordering = ['-created']
@@ -174,7 +195,8 @@ class Topic(models.Model):
         return reverse('pybb:topic', kwargs={'pk': self.id})
 
     def save(self, *args, **kwargs):
-        if self.id is None:
+        created = self.id is None
+        if created:
             self.created = tznow()
 
         forum_changed = False
@@ -185,6 +207,9 @@ class Topic(models.Model):
                 forum_changed = True
 
         super(Topic, self).save(*args, **kwargs)
+
+        if created:
+            self.forum.update_counters()
 
         if forum_changed:
             old_topic.forum.update_counters()
@@ -460,6 +485,17 @@ class PollAnswerUser(models.Model):
 
     def __str__(self):
         return '%s - %s' % (self.poll_answer.topic, self.user)
+
+
+class TopicEmailSendUserNotification(models.Model):
+    """
+    Stored in the table value of the flag, if the "Truth"
+    the message is not sent if there is no record or a flag "Lies"
+    then send mail about changes in the topic subscriber
+    """
+    user = models.ForeignKey(get_user_model_path())
+    topic = models.ForeignKey(Topic, related_name='notifications')
+    flag = models.BooleanField(default=True)
 
 
 if django.VERSION[:2] < (1, 7):
