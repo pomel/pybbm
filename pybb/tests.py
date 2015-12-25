@@ -196,13 +196,13 @@ class FeaturesTest(TestCase, SharedTestModule):
             tree.xpath('//a[@href="%s"]/parent::td[contains(@class,"unread")]' % topic.forum.get_absolute_url()))
         # Visit it
         client.get(topic.get_absolute_url())
-        # Topic status - readed
+        # Topic status - read
         tree = html.fromstring(client.get(topic.forum.get_absolute_url()).content)
         # Visit others
         for t in topic.forum.topics.all():
             client.get(t.get_absolute_url())
         self.assertFalse(tree.xpath('//a[@href="%s"]/parent::td[contains(@class,"unread")]' % topic.get_absolute_url()))
-        # Forum status - readed
+        # Forum status - read
         tree = html.fromstring(client.get(reverse('pybb:index')).content)
         self.assertFalse(
             tree.xpath('//a[@href="%s"]/parent::td[contains(@class,"unread")]' % topic.forum.get_absolute_url()))
@@ -213,10 +213,10 @@ class FeaturesTest(TestCase, SharedTestModule):
         values['body'] = 'test tracking'
         response = client.post(add_post_url, values, follow=True)
         self.assertContains(response, 'test tracking')
-        # Topic status - readed
+        # Topic status - read
         tree = html.fromstring(client.get(topic.forum.get_absolute_url()).content)
         self.assertFalse(tree.xpath('//a[@href="%s"]/parent::td[contains(@class,"unread")]' % topic.get_absolute_url()))
-        # Forum status - readed
+        # Forum status - read
         tree = html.fromstring(client.get(reverse('pybb:index')).content)
         self.assertFalse(
             tree.xpath('//a[@href="%s"]/parent::td[contains(@class,"unread")]' % topic.forum.get_absolute_url()))
@@ -226,7 +226,7 @@ class FeaturesTest(TestCase, SharedTestModule):
         tree = html.fromstring(client.get(reverse('pybb:index')).content)
         self.assertFalse(
             tree.xpath('//a[@href="%s"]/parent::td[contains(@class,"unread")]' % topic.forum.get_absolute_url()))
-        # Empty forum - readed
+        # Empty forum - read
         f = Forum(name='empty', category=self.category)
         f.save()
         tree = html.fromstring(client.get(reverse('pybb:index')).content)
@@ -266,7 +266,7 @@ class FeaturesTest(TestCase, SharedTestModule):
         self.assertEqual(TopicReadTracker.objects.filter(user=user_bob).count(), 1)
         self.assertEqual(TopicReadTracker.objects.filter(user=user_bob, topic=topic_1).count(), 1)
 
-        # user_bob reads topic_2, he should get a forum read tracker, 
+        # user_bob reads topic_2, he should get a forum read tracker,
         #  there should be no topic read trackers for user_bob
         time.sleep(1)
         client_bob.get(topic_2.get_absolute_url())
@@ -357,7 +357,7 @@ class FeaturesTest(TestCase, SharedTestModule):
         self.assertEqual(TopicReadTracker.objects.filter(user=self.user).count(), 1)
         self.assertEqual(TopicReadTracker.objects.filter(user=self.user, topic=topic_1).count(), 1)
 
-        # user reads topic_2, they should get a forum read tracker, 
+        # user reads topic_2, they should get a forum read tracker,
         #  there should be no topic read trackers for the user
         client.get(topic_2.get_absolute_url())
         self.assertEqual(TopicReadTracker.objects.all().count(), 0)
@@ -374,8 +374,8 @@ class FeaturesTest(TestCase, SharedTestModule):
         values['body'] = 'test tracking'
         response = client.post(add_post_url, values, follow=True)
 
-        # after posting in topic it should be readed
-        # because there is only one topic, so whole forum should be marked as readed
+        # after posting in topic it should be read
+        # because there is only one topic, so whole forum should be marked as read
         self.assertEqual(TopicReadTracker.objects.filter(user=self.user, topic=self.topic).count(), 0)
         self.assertEqual(ForumReadTracker.objects.filter(user=self.user, forum=self.forum).count(), 1)
 
@@ -460,7 +460,7 @@ class FeaturesTest(TestCase, SharedTestModule):
         self.assertListEqual([f.unread for f in pybb_forum_unread([forum_parent, forum_child1, forum_child2], user_ann)],
                              [True, True, True])
 
-        # unless we read parent topic, there is unreaded topics in child forums
+        # unless we read parent topic, there are unread topics in child forums
         client_ann.get(topic_1.get_absolute_url())
         forum_parent = Forum.objects.get(id=forum_parent.id)
         forum_child1 = Forum.objects.get(id=forum_child1.id)
@@ -568,6 +568,51 @@ class FeaturesTest(TestCase, SharedTestModule):
 
         response = client_ann.get(topic_1.get_absolute_url(), data={'first-unread': 1}, follow=True)
         self.assertRedirects(response, '%s?page=%d#post-%d' % (topic_1.get_absolute_url(), 1, post_1_3.id))
+
+    def test_read_with_permissions(self):
+        #hidden topic not counted
+        user_ann = User.objects.create_user('ann', 'ann@localhost', 'ann')
+        client_ann = Client()
+        client_ann.login(username='ann', password='ann')
+
+        forum = Forum.objects.create(
+            name='f1', description='foo', category=self.category
+        )
+        topic_1 = self.topic
+        # topic_2 = Topic.objects.create(
+        #     name='topic_2',
+        #     forum=forum,
+        #     user=self.user,
+        #     hidden=True
+        # )
+        # topic_2.save()
+        client_ann.get(reverse('pybb:mark_all_as_read'))
+        # #new post in hidden topic
+        # Post.objects.create(topic=topic_2, user=self.user, body='one')
+        # pybb_forum_unread([forum], self.user)
+        # self.assertFalse(forum.unread)
+
+        #hidden subforum
+        subforum = Forum.objects.create(
+            name='f2', description='bar', category=self.category,
+            parent=forum, hidden=True
+        )
+        pybb_forum_unread([forum], self.user)
+        self.assertFalse(forum.unread)
+
+        #topic in hidden subforum
+        topic_3 = Topic.objects.create(
+            name='topic_from_hidden_forum',
+            forum=forum,
+            user=self.user,
+        )
+        pybb_forum_unread([forum], self.user)
+        self.assertFalse(forum.unread)
+
+        #post in topic from hidden subforum
+        Post.objects.create(topic=topic_3, user=self.user, body='two')
+
+
 
     def test_latest_topics(self):
         topic_1 = self.topic
@@ -1434,9 +1479,9 @@ class FiltersTest(TestCase, SharedTestModule):
 
 
 class CustomPermissionHandler(permissions.DefaultPermissionHandler):
-    """ 
+    """
     a custom permission handler which changes the meaning of "hidden" forum:
-    "hidden" forum or category is visible for all logged on users, not only staff 
+    "hidden" forum or category is visible for all logged on users, not only staff
     """
 
     def filter_categories(self, user, qs):
@@ -1746,7 +1791,7 @@ class LogonRedirectTest(TestCase, SharedTestModule):
         nostaff.is_staff = False
         nostaff.save()
 
-        # create topic, post in hidden category 
+        # create topic, post in hidden category
         self.category = Category(name='private', hidden=True)
         self.category.save()
         self.forum = Forum(name='priv1', category=self.category)
@@ -1836,7 +1881,7 @@ class LogonRedirectTest(TestCase, SharedTestModule):
         # allowed user is allowed
         r = self.get_with_user(edit_post_url, 'staff', 'staff')
         self.assertEquals(r.status_code, 200)
-        
+
     def test_profile_autocreation_signal_on(self):
         user = User.objects.create_user('cronos', 'cronos@localhost', 'cronos')
         profile = getattr(user, defaults.PYBB_PROFILE_RELATED_NAME, None)

@@ -2,9 +2,12 @@
 from __future__ import unicode_literals
 import inspect
 
+from collections import defaultdict
 import math
 import time
 import warnings
+import pytz
+import datetime
 
 from django import template
 from django.core.cache import cache
@@ -16,8 +19,9 @@ from django.utils.encoding import smart_text
 from django.utils.html import escape
 from django.utils.translation import ugettext as _
 from django.utils import dateformat
-from django.utils.timezone import timedelta
+from django.utils.timezone import timedelta, get_default_timezone, make_aware
 from django.utils.timezone import now as tznow
+from django.db.models import Sum
 
 try:
     import pytils
@@ -31,6 +35,13 @@ from pybb import defaults, util
 
 
 register = template.Library()
+
+from django.conf import settings
+if getattr(settings, 'USE_TZ', False):
+    MIN_TS = datetime.datetime.min
+else:
+    MIN_TS = make_aware(datetime.datetime.min + datetime.timedelta(days=1),
+                        get_default_timezone())
 
 
 #noinspection PyUnusedLocal
@@ -179,24 +190,84 @@ def pybb_topic_unread(topics, user):
 
 
 @register.filter
+def topic_count_with_child(forum):
+    """
+    По объекту форума, суммируем у "детей" колличество постов.
+    """
+    try:
+        count = forum.topic_count
+        child = forum.child_forums.all().aggregate(
+            topic_count=Sum('topic_count'))['topic_count']
+        if child:
+            count += child
+        return count
+    except AttributeError:
+        return 0
+
+
+@register.filter
+def post_count_with_child(forum):
+    """
+    По объекту форума, суммируем у "детей" колличество сообщений.
+    """
+    try:
+        count = forum.post_count
+        child = forum.child_forums.all().aggregate(
+            post_count=Sum('post_count'))['post_count']
+        if child:
+            count += child
+        return count
+    except AttributeError:
+        return 0
+
+
+def forum_unread(forum, user, marks_cache):
+    if settings.USE_TZ:
+        default_date = pytz.utc.localize(datetime.datetime.min)
+    else:
+        default_date = datetime.datetime.min
+    ts = marks_cache.get(forum.id, default_date)
+
+    if forum.updated and (forum.updated > ts):
+        topics = perms.filter_topics(user, forum.topics)
+        qs = TopicReadTracker.objects.filter(
+            user=user, topic__in=topics).values_list('topic', 'time_stamp')
+        topic_read = dict(qs)
+        for topic in topics:
+            if ((topic.updated or topic.created) >
+                topic_read.get(topic.id, default_date)):
+                return True
+
+    forums = perms.filter_forums(user, forum.child_forums)
+    marks_cache.update(ForumReadTracker.objects.filter(
+            user=user,
+            forum__in=forums
+        ).values_list('forum', 'time_stamp'))
+
+    for fr in forums:
+        if forum_unread(fr, user, marks_cache):
+            return True
+
+    return False
+
+
+
+@register.filter
 def pybb_forum_unread(forums, user):
     """
     Check if forum has unread messages.
     """
     forum_list = list(forums)
+
     if user.is_authenticated():
-        for forum in forum_list:
-            forum.unread = forum.topic_count > 0
-        forum_marks = ForumReadTracker.objects.filter(
+        marks_cache = dict()
+        marks_cache.update(ForumReadTracker.objects.filter(
             user=user,
             forum__in=forum_list
-        ).select_related('forum')
-        forum_dict = dict(((forum.id, forum) for forum in forum_list))
-        for mark in forum_marks:
-            curr_forum = forum_dict[mark.forum.id]
-            if (curr_forum.updated is None) or (curr_forum.updated <= mark.time_stamp):
-                if not any((f.unread for f in pybb_forum_unread(curr_forum.child_forums.all(), user))):
-                    forum_dict[mark.forum.id].unread = False
+        ).values_list('forum', 'time_stamp'))
+
+        for forum in forum_list:
+            forum.unread = forum_unread(forum, user, marks_cache)
     return forum_list
 
 
